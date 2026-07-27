@@ -180,6 +180,38 @@
   .note { font-size: 13px; opacity: .8; margin-bottom: 14px; line-height: 1.4; }
 
   #confetti { font-size: 56px; margin-bottom: 8px; }
+
+  /* ---------- выход из игры ---------- */
+  #btn-back { position: absolute; top: calc(env(safe-area-inset-top) + 8px); left: 8px; z-index: 25;
+    width: 40px; height: 40px; border-radius: 12px; border: none; background: rgba(0,0,0,.35); color: #fff;
+    font-size: 20px; cursor: pointer; }
+  .big-btn.red { background: linear-gradient(180deg, #e46a6a, #b93b3b); }
+
+  /* ---------- эмодзи-общение ---------- */
+  #btn-emote { position: absolute; right: 10px; bottom: 8px; z-index: 25; width: 46px; height: 46px;
+    border-radius: 50%; border: none; background: rgba(255,255,255,.92); font-size: 24px; cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0,0,0,.35); }
+  #emote-panel { position: absolute; left: 50%; transform: translateX(-50%); bottom: 62px;
+    width: min(340px, 94vw); background: #fff; border-radius: 18px; padding: 12px; display: none; z-index: 40;
+    box-shadow: 0 12px 40px rgba(0,0,0,.45); }
+  #emote-panel.visible { display: block; }
+  .em-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; max-height: 272px; overflow-y: auto; }
+  .em-item { position: relative; width: 100%; aspect-ratio: 1; border-radius: 12px; background: #f2f2f5;
+    border: none; font-size: 30px; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
+  .em-item:active { transform: scale(.9); }
+  .em-item img { width: 100%; height: 100%; object-fit: cover; border-radius: 12px; pointer-events: none; }
+  .em-del { position: absolute; top: -4px; right: -4px; width: 20px; height: 20px; border-radius: 50%;
+    background: #c0392b; color: #fff; font-size: 11px; border: none; display: flex; align-items: center;
+    justify-content: center; cursor: pointer; z-index: 2; }
+  .em-add { background: #e8f4e8; color: #3fa53f; font-size: 26px; font-weight: 800; }
+
+  .emote-bubble { position: fixed; z-index: 60; width: 64px; height: 64px; border-radius: 14px; background: #fff;
+    box-shadow: 0 6px 20px rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center;
+    font-size: 42px; animation: emopop .22s ease; pointer-events: none; transition: opacity .4s; }
+  .emote-bubble img { width: 100%; height: 100%; object-fit: cover; border-radius: 14px; }
+  .emote-bubble::after { content: ''; position: absolute; bottom: -7px; left: 50%; margin-left: -7px;
+    border: 7px solid transparent; border-top-color: #fff; border-bottom: none; }
+  @keyframes emopop { from { transform: scale(.3); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 </style>
 </head>
 <body>
@@ -228,17 +260,33 @@
 
 <!-- ИГРА -->
 <div id="game" class="screen">
+  <button id="btn-back">←</button>
   <div id="opponents"></div>
   <div id="table-center">
     <div id="badges"></div>
     <div id="deck"><div class="stack" style="left:4px;top:4px"></div><div class="stack" style="left:2px;top:2px"></div><div class="stack"></div><div class="dcount"></div></div>
     <div id="pile"></div>
     <div id="toast"></div>
+    <button id="btn-emote">😊</button>
+    <div id="emote-panel"><div class="em-grid" id="em-grid"></div></div>
   </div>
   <div id="bottom">
     <div id="actions"></div>
     <div id="player-info"><div class="ava" id="pi-ava">👤</div><div class="nm" id="pi-name"></div><div class="sc" id="pi-score">0</div></div>
     <div id="hand"></div>
+  </div>
+</div>
+
+<input type="file" id="em-file" accept="image/*" style="display:none">
+
+<!-- ВЫХОД ИЗ ИГРЫ -->
+<div class="modal-wrap" id="m-exit">
+  <div class="modal">
+    <h2>Выйти из игры?</h2>
+    <div class="note" id="mx-note"></div>
+    <button class="big-btn red" id="btn-exit-yes" style="width:auto;padding:12px 36px;margin-bottom:10px">Выйти</button>
+    <br>
+    <button class="big-btn grey" id="btn-exit-no" style="width:auto;padding:11px 30px">Отмена</button>
   </div>
 </div>
 
@@ -431,6 +479,16 @@
         if (!from || !state) return;
         if (state.turn !== from.seat) return; // не его ход
         hostApply(msg.a);
+      } else if (msg && msg.t === 'emote') {
+        const from = conns.find(c => c.conn === conn);
+        if (!from || !validEmote(msg.e)) return;
+        const now = Date.now();
+        if (from.lastEmote && now - from.lastEmote < 1200) return; // антиспам
+        from.lastEmote = now;
+        showEmote(from.seat, msg.e);
+        for (const c of conns) {
+          if (c !== from) { try { c.conn.send({ t: 'emote', seat: from.seat, e: msg.e }); } catch (err) {} }
+        }
       }
     });
     conn.on('close', () => {
@@ -507,6 +565,7 @@
   function onHostMessage(msg) {
     if (!msg) return;
     if (msg.t === 'full') { alert('Комната заполнена или игра уже идёт.'); cleanupNet(); show('menu'); return; }
+    if (msg.t === 'emote') { showEmote(msg.seat, msg.e); return; }
     if (msg.t === 'room') {
       roomPlayers = msg.names.map(n => ({ name: n }));
       renderRoom();
@@ -948,6 +1007,140 @@
   }
 
   window.addEventListener('resize', () => { if (state) render(); });
+
+  /* ================= ВЫХОД ИЗ ИГРЫ ================= */
+  $('#btn-back').onclick = () => {
+    if (!state) { show('menu'); return; }
+    $('#mx-note').textContent =
+      mode === 'host' ? 'Ты хост — игра закончится у всех игроков.' :
+      mode === 'guest' ? 'За тебя доиграет бот, остальные продолжат.' :
+      'Текущая игра не сохранится.';
+    $('#m-exit').classList.add('visible');
+  };
+  $('#btn-exit-no').onclick = () => $('#m-exit').classList.remove('visible');
+  $('#btn-exit-yes').onclick = () => {
+    $('#m-exit').classList.remove('visible');
+    clearTimeout(botTimer);
+    cleanupNet();
+    show('menu');
+  };
+
+  /* ================= СТИКЕРЫ-ОБЩЕНИЕ ================= */
+  // Встроенный набор собирается из папки stickers/ при сборке (node build.js)
+  //__STICKERS__//
+  const STICKER_MAX = 20;
+  let customStickers = [];
+  try { customStickers = JSON.parse(localStorage.getItem('d101stickers') || '[]'); } catch (e) {}
+  function saveStickers() { try { localStorage.setItem('d101stickers', JSON.stringify(customStickers)); } catch (e) { toast('Не хватило места для стикера'); } }
+
+  let lastEmoteAt = 0;
+  const emoteBubbles = {}; // seat -> element
+
+  function renderEmotePanel() {
+    const grid = $('#em-grid');
+    grid.innerHTML = '';
+    // свои стикеры — первыми
+    customStickers.forEach((src, idx) => {
+      const b = document.createElement('button');
+      b.className = 'em-item';
+      b.innerHTML = '<img src="' + src + '" alt="">';
+      b.onclick = () => sendEmote({ kind: 'img', src });
+      const del = document.createElement('button');
+      del.className = 'em-del';
+      del.textContent = '✕';
+      del.onclick = ev => { ev.stopPropagation(); customStickers.splice(idx, 1); saveStickers(); renderEmotePanel(); };
+      b.appendChild(del);
+      grid.appendChild(b);
+    });
+    // кнопка добавления
+    const add = document.createElement('button');
+    add.className = 'em-item em-add';
+    add.textContent = '+';
+    add.title = 'Добавить свой стикер';
+    add.onclick = () => {
+      if (customStickers.length >= STICKER_MAX) { toast('Максимум ' + STICKER_MAX + ' своих стикеров'); return; }
+      $('#em-file').click();
+    };
+    grid.appendChild(add);
+    // встроенные стикеры (из папки stickers/ проекта)
+    BUILTIN_STICKERS.forEach((src, i) => {
+      const b = document.createElement('button');
+      b.className = 'em-item em-builtin';
+      b.innerHTML = '<img src="' + src + '" alt="">';
+      b.onclick = () => sendEmote({ kind: 'sticker', i });
+      grid.appendChild(b);
+    });
+  }
+
+  $('#btn-emote').onclick = () => {
+    const p = $('#emote-panel');
+    if (p.classList.contains('visible')) { p.classList.remove('visible'); return; }
+    renderEmotePanel();
+    p.classList.add('visible');
+  };
+
+  // загрузка своей картинки: квадратная обрезка по центру + сжатие до 96×96
+  $('#em-file').onchange = () => {
+    const file = $('#em-file').files[0];
+    $('#em-file').value = '';
+    if (!file) return;
+    const img = new Image();
+    img.onload = () => {
+      const S = 96;
+      const cv = document.createElement('canvas');
+      cv.width = S; cv.height = S;
+      const ctx = cv.getContext('2d');
+      const side = Math.min(img.width, img.height);
+      ctx.drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, S, S);
+      const src = cv.toDataURL('image/jpeg', 0.82);
+      if (src.length > 40000) { toast('Картинка слишком сложная'); return; }
+      customStickers.unshift(src);
+      saveStickers();
+      renderEmotePanel();
+      URL.revokeObjectURL(img.src);
+    };
+    img.onerror = () => toast('Не удалось открыть картинку');
+    img.src = URL.createObjectURL(file);
+  };
+
+  function validEmote(e) {
+    if (!e) return false;
+    if (e.kind === 'sticker') return Number.isInteger(e.i) && e.i >= 0 && e.i < BUILTIN_STICKERS.length;
+    if (e.kind === 'emoji') return typeof e.char === 'string' && e.char.length <= 8;
+    if (e.kind === 'img') return typeof e.src === 'string' && e.src.startsWith('data:image') && e.src.length <= 40000;
+    return false;
+  }
+
+  function sendEmote(e) {
+    const now = Date.now();
+    if (now - lastEmoteAt < 1500) { toast('Не так часто 😉'); return; }
+    lastEmoteAt = now;
+    $('#emote-panel').classList.remove('visible');
+    showEmote(mySeat, e);
+    if (mode === 'guest') { try { hostConn && hostConn.send({ t: 'emote', e }); } catch (err) {} }
+    else if (mode === 'host') broadcast({ t: 'emote', seat: mySeat, e });
+  }
+
+  function showEmote(seat, e) {
+    if (!validEmote(e)) return;
+    const anchor = seat === mySeat
+      ? $('#player-info .ava')
+      : document.querySelector('#opponents .opp[data-pidx="' + seat + '"] .ava');
+    if (!anchor) return;
+    const r = anchor.getBoundingClientRect();
+    if (emoteBubbles[seat]) emoteBubbles[seat].remove();
+    const d = document.createElement('div');
+    d.className = 'emote-bubble';
+    if (e.kind === 'sticker') d.innerHTML = '<img src="' + BUILTIN_STICKERS[e.i] + '" alt="">';
+    else if (e.kind === 'img') d.innerHTML = '<img src="' + e.src + '" alt="">';
+    else d.textContent = e.char;
+    d.style.left = Math.max(4, Math.min(window.innerWidth - 68, r.left + r.width / 2 - 32)) + 'px';
+    d.style.top = Math.max(4, r.top - 72) + 'px';
+    document.body.appendChild(d);
+    emoteBubbles[seat] = d;
+    setTimeout(() => { d.style.opacity = '0'; }, 2200);
+    setTimeout(() => { d.remove(); if (emoteBubbles[seat] === d) delete emoteBubbles[seat]; }, 2650);
+  }
 
   /* ================= PWA ================= */
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
