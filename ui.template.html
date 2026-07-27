@@ -205,12 +205,13 @@
     justify-content: center; cursor: pointer; z-index: 2; }
   .em-add { background: #e8f4e8; color: #3fa53f; font-size: 26px; font-weight: 800; }
 
-  .emote-bubble { position: fixed; z-index: 60; width: 64px; height: 64px; border-radius: 14px; background: #fff;
-    box-shadow: 0 6px 20px rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center;
-    font-size: 42px; animation: emopop .22s ease; pointer-events: none; transition: opacity .4s; }
-  .emote-bubble img { width: 100%; height: 100%; object-fit: cover; border-radius: 14px; }
+  .emote-bubble { position: fixed; z-index: 60; width: 108px; height: 108px; border-radius: 18px; background: #fff;
+    box-shadow: 0 8px 26px rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center;
+    font-size: 72px; animation: emopop .22s ease; pointer-events: none; transition: opacity .4s; }
+  .emote-bubble img { width: 100%; height: 100%; object-fit: cover; border-radius: 18px; }
   .emote-bubble::after { content: ''; position: absolute; bottom: -7px; left: 50%; margin-left: -7px;
     border: 7px solid transparent; border-top-color: #fff; border-bottom: none; }
+  .emote-bubble.below::after { bottom: auto; top: -7px; border-top: none; border-bottom: 7px solid #fff; }
   @keyframes emopop { from { transform: scale(.3); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 </style>
 </head>
@@ -1134,8 +1135,10 @@
     if (e.kind === 'sticker') d.innerHTML = '<img src="' + BUILTIN_STICKERS[e.i] + '" alt="">';
     else if (e.kind === 'img') d.innerHTML = '<img src="' + e.src + '" alt="">';
     else d.textContent = e.char;
-    d.style.left = Math.max(4, Math.min(window.innerWidth - 68, r.left + r.width / 2 - 32)) + 'px';
-    d.style.top = Math.max(4, r.top - 72) + 'px';
+    d.style.left = Math.max(4, Math.min(window.innerWidth - 112, r.left + r.width / 2 - 54)) + 'px';
+    // над аватаром; если у верхнего края не помещается — под ним
+    if (r.top - 118 >= 4) d.style.top = (r.top - 118) + 'px';
+    else { d.style.top = (r.bottom + 14) + 'px'; d.classList.add('below'); }
     document.body.appendChild(d);
     emoteBubbles[seat] = d;
     setTimeout(() => { d.style.opacity = '0'; }, 2200);
