@@ -505,8 +505,14 @@
     if (state.pendingSevens > 0) {
       actions.push({ type: 'draw' }); // взять штраф (можно и добровольно, имея семёрку)
     } else if (state.mustCover) {
-      if (plays.length === 0) {
-        actions.push(totalDrawableCards(state) > 0 ? { type: 'draw' } : { type: 'pass' });
+      if (state.coverMode === 'once') {
+        // после шестёрки: закрыть, взять одну карту (если ещё не брал) или спасовать
+        if (!state.drawnThisTurn && totalDrawableCards(state) > 0) actions.push({ type: 'draw' });
+        actions.push({ type: 'pass' });
+      } else {
+        // после 8/9: закрыть или добирать из колоды (даже имея чем закрыть)
+        if (totalDrawableCards(state) > 0) actions.push({ type: 'draw' });
+        else if (plays.length === 0) actions.push({ type: 'pass' });
       }
     } else {
       // брать карту можно всегда (даже если есть чем ходить), но один раз за ход
@@ -654,14 +660,17 @@
           advanceTurn(state);
           return state;
         }
-        if (state.coverMode === 'once' && playableIndexes(state, player).length === 0) {
-          // после шестёрки — только одна попытка добора: не закрыл — ход переходит
-          state.mustCover = false;
-          state.coverMode = null;
-          emit(state, { type: 'coverFail', player: player.idx });
-          advanceTurn(state);
+        if (state.coverMode === 'once') {
+          state.drawnThisTurn = true; // вторую взять нельзя
+          if (playableIndexes(state, player).length === 0) {
+            // не закрыл единственной попыткой — ход переходит
+            state.mustCover = false;
+            state.coverMode = null;
+            emit(state, { type: 'coverFail', player: player.idx });
+            advanceTurn(state);
+          }
         }
-        // coverMode 'until': остаёмся, игрок добирает дальше, пока не сможет закрыть
+        // coverMode 'until': остаёмся, игрок добирает дальше, пока не решит закрыть
         return state;
       }
       // обычный ход: берём одну карту (можно и добровольно, имея чем ходить)

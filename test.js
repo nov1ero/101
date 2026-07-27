@@ -130,9 +130,24 @@ function rig(s, { hand0, hand1, hand2, top, turn }) {
   E.applyAction(s, { type: 'play', cardIndex: 0 }); // 6♠
   assert(s.turn === 0 && s.mustCover, 'после 6 ход остаётся, надо закрыть');
   const acts = E.getLegalActions(s);
-  assert(acts.length === 1 && acts[0].type === 'play', 'закрыть можно только подходящей картой');
-  E.applyAction(s, acts[0]); // К♠ закрывает
+  assert(acts.some(a => a.type === 'play'), 'можно закрыть');
+  assert(acts.some(a => a.type === 'draw'), 'после 6 всегда можно взять карту');
+  assert(acts.some(a => a.type === 'pass'), 'после 6 всегда можно спасовать');
+  E.applyAction(s, acts.find(a => a.type === 'play')); // К♠ закрывает
   assert(s.turn === 1 && !s.mustCover, 'после закрытия ход переходит');
+}
+{
+  // после 6 можно просто спасовать, даже не закрывая
+  const s = E.createGame([{ name: 'A' }, { name: 'B' }], 6);
+  E.startRound(s);
+  rig(s, {
+    hand0: [['6', '♠'], ['К', '♠'], ['В', '♥']],
+    hand1: [['К', '♥'], ['В', '♦']],
+    top: ['10', '♠'], turn: 0,
+  });
+  E.applyAction(s, { type: 'play', cardIndex: 0 }); // 6♠
+  E.applyAction(s, { type: 'pass' });
+  assert(s.turn === 1 && !s.mustCover, 'спасовал — ход перешёл, шестёрка осталась открытой');
 }
 /* положить конкретную карту наверх колоды (следующая к взятию) */
 function deckTop(s, spec) {
@@ -152,6 +167,7 @@ function deckTop(s, spec) {
   });
   E.applyAction(s, { type: 'play', cardIndex: 0 }); // 6♠, в руке только В♥ — не закрывает
   assert(s.mustCover && s.coverMode === 'once' && s.turn === 0, 'должен закрыть, одна попытка');
+  assert(E.getLegalActions(s).some(a => a.type === 'pass'), 'можно и спасовать');
   deckTop(s, ['10', '♥']); // не закрывает 6♠
   const before = s.players[0].hand.length;
   E.applyAction(s, { type: 'draw' });
@@ -170,10 +186,12 @@ function deckTop(s, spec) {
   E.applyAction(s, { type: 'play', cardIndex: 0 });
   deckTop(s, ['К', '♠']); // закрывает 6♠
   E.applyAction(s, { type: 'draw' });
-  assert(s.turn === 0 && s.mustCover, 'взятая закрывает — ход остаётся, надо сыграть');
+  assert(s.turn === 0 && s.mustCover, 'взятая закрывает — ход остаётся');
   const acts = E.getLegalActions(s);
-  assert(acts.length === 1 && acts[0].type === 'play', 'только закрытие');
-  E.applyAction(s, acts[0]);
+  assert(acts.some(a => a.type === 'play'), 'можно закрыть взятой');
+  assert(!acts.some(a => a.type === 'draw'), 'вторую взять нельзя');
+  assert(acts.some(a => a.type === 'pass'), 'а спасовать можно');
+  E.applyAction(s, acts.find(a => a.type === 'play'));
   assert(s.turn === 1, 'закрыл — ход перешёл');
 }
 {
@@ -196,7 +214,9 @@ function deckTop(s, spec) {
   deckTop(s, ['9', '♠']); // закрывает
   E.applyAction(s, { type: 'draw' });
   const acts = E.getLegalActions(s);
-  assert(acts.length === 1 && acts[0].type === 'play', 'добрал до закрытия — обязан сыграть');
+  assert(acts.some(a => a.type === 'play'), 'добрал до закрытия — можно сыграть');
+  assert(acts.some(a => a.type === 'draw'), 'но можно и копать колоду дальше');
+  assert(!acts.some(a => a.type === 'pass'), 'спасовать после 8 нельзя');
 }
 
 /* ---------- 6. Девятку закрывает следующий игрок ---------- */
@@ -211,7 +231,9 @@ function deckTop(s, spec) {
   E.applyAction(s, { type: 'play', cardIndex: 0 }); // 9♠
   assert(s.turn === 1 && s.mustCover, 'девятку закрывает следующий');
   const acts = E.getLegalActions(s);
-  assert(acts.length === 1 && acts[0].type === 'play', 'только закрытие');
+  assert(acts.some(a => a.type === 'play'), 'можно закрыть');
+  assert(acts.some(a => a.type === 'draw'), 'после 9 всегда можно брать из колоды');
+  assert(!acts.some(a => a.type === 'pass'), 'спасовать нельзя');
 }
 {
   // у следующего нечем — добирает по одной, до упора
@@ -449,8 +471,8 @@ function deckTop(s, spec) {
   deckTop(s, ['К', '♠']); // закрывает
   E.applyAction(s, { type: 'draw' });
   const acts = E.getLegalActions(s);
-  assert(acts.length === 1 && acts[0].type === 'play', 'обязан закрыть');
-  E.applyAction(s, acts[0]); // К♠ закрыл девятку
+  assert(acts.some(a => a.type === 'play'), 'можно закрыть');
+  E.applyAction(s, acts.find(a => a.type === 'play')); // К♠ закрыл девятку
   assert(s.phase === 'roundEnd' && s.roundWinner === 0, 'теперь раунд завершён, победил A');
   assert(s.players[1].roundPoints === 2 + 2 + 4, 'B посчитан с добранными картами (В+В+К♥)');
   E.startRound(s);
