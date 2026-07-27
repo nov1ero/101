@@ -14,9 +14,10 @@ function assert(cond, msg) {
   const all = [...s.deck, ...s.pile, ...s.players[0].hand, ...s.players[1].hand];
   assert(all.length === 36, 'в игре 36 карт');
   assert(new Set(all.map(c => c.id)).size === 36, 'все карты уникальны');
-  assert(s.players[0].hand.length === 5 && s.players[1].hand.length === 5, 'раздано по 5 карт');
+  const counts = s.players.map(p => p.hand.length).sort();
+  assert(counts[0] === 4 && counts[1] === 5, 'у сдающего 4 карты (пятая на столе), у второго 5');
   assert(s.pile.length === 1, 'одна карта на столе');
-  assert(s.deck.length === 36 - 10 - 1, 'остаток в колоде верный');
+  assert(s.deck.length === 36 - 9 - 1, 'остаток в колоде верный');
 }
 
 /* ---------- 2. Очки ---------- */
@@ -136,6 +137,7 @@ function rig(s, { hand0, hand1, hand2, top, turn }) {
 /* положить конкретную карту наверх колоды (следующая к взятию) */
 function deckTop(s, spec) {
   const i = s.deck.findIndex(c => c.rank === spec[0] && c.suit === spec[1]);
+  if (i < 0) throw new Error('deckTop: карты ' + spec[0] + spec[1] + ' нет в колоде');
   const [c] = s.deck.splice(i, 1);
   s.deck.push(c);
 }
@@ -150,7 +152,7 @@ function deckTop(s, spec) {
   });
   E.applyAction(s, { type: 'play', cardIndex: 0 }); // 6♠, в руке только В♥ — не закрывает
   assert(s.mustCover && s.coverMode === 'once' && s.turn === 0, 'должен закрыть, одна попытка');
-  deckTop(s, ['К', '♥']); // не закрывает 6♠
+  deckTop(s, ['10', '♥']); // не закрывает 6♠
   const before = s.players[0].hand.length;
   E.applyAction(s, { type: 'draw' });
   assert(s.players[0].hand.length === before + 1, 'взял ровно одну');
@@ -185,10 +187,10 @@ function deckTop(s, spec) {
   });
   E.applyAction(s, { type: 'play', cardIndex: 0 }); // 8♠
   assert(s.mustCover && s.coverMode === 'until' && s.turn === 0, 'восьмёрка: закрывать до упора');
-  deckTop(s, ['К', '♥']); // не закрывает
+  deckTop(s, ['10', '♥']); // не закрывает
   E.applyAction(s, { type: 'draw' });
   assert(s.turn === 0 && s.mustCover, 'не закрыл — но ход НЕ переходит (до упора)');
-  deckTop(s, ['В', '♦']); // снова не закрывает
+  deckTop(s, ['В', '♣']); // снова не закрывает
   E.applyAction(s, { type: 'draw' });
   assert(s.turn === 0 && s.mustCover, 'всё ещё добирает');
   deckTop(s, ['9', '♠']); // закрывает
@@ -498,10 +500,24 @@ function deckTop(s, spec) {
   assert(s.turn === 2, 'шаг назад: ходит игрок перед победителем');
 }
 {
-  // в первом раунде карта из колоды эффекта не даёт
-  const s = E.createGame([{ name: 'A' }, { name: 'B' }], 33);
-  E.startRound(s);
-  assert(s.pendingSevens === 0 && !s.mustCover, 'первая карта первого раунда без эффекта');
+  // в первом раунде: раздача от случайного игрока, последняя разданная карта — на стол,
+  // её владелец остаётся с 4 картами, модификаторы действуют
+  for (let seed = 40; seed < 60; seed++) {
+    const s = E.createGame([{ name: 'A' }, { name: 'B' }, { name: 'C' }], seed);
+    E.startRound(s);
+    const ev = s.log.find(e => e.type === 'roundStart');
+    const owner = ev.fromWinner;
+    assert(owner !== null && owner !== undefined, 'у стартовой карты есть владелец (seed ' + seed + ')');
+    assert(s.players[owner].hand.length === 4, 'у владельца 4 карты (seed ' + seed + ')');
+    assert(s.players.filter(p => p.hand.length === 5).length === 2, 'у остальных по 5 (seed ' + seed + ')');
+    const top = s.pile[0];
+    // модификаторы действуют
+    if (top.rank === '7') assert(s.pendingSevens === 1, 'семёрка на старте — штраф (seed ' + seed + ')');
+    if (top.rank === '8' || top.rank === '9') assert(s.mustCover && s.coverMode === 'until', '8/9 на старте закрываются (seed ' + seed + ')');
+    if (top.rank === '6') assert(s.mustCover && s.coverMode === 'once', '6 на старте закрывается (seed ' + seed + ')');
+    const total = s.deck.length + s.pile.length + s.players.reduce((x, p) => x + p.hand.length, 0);
+    assert(total === 36, 'карты сходятся (seed ' + seed + ')');
+  }
 }
 
 /* ---------- 12. Массовая симуляция: 300 полных игр ботами ---------- */

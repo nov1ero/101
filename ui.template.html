@@ -272,6 +272,8 @@
     <h2 id="mg-title"></h2>
     <div id="mg-body"></div>
     <button class="big-btn" id="btn-again" style="padding:12px 40px;font-size:17px;width:auto;margin-bottom:10px">🔄 Играть ещё</button>
+    <br>
+    <button class="big-btn blue" id="btn-shuffle" style="padding:12px 30px;font-size:16px;width:auto;margin-bottom:10px">🔀 Перемешать игроков</button>
     <div class="sub" id="mg-wait" style="display:none;margin-bottom:10px">Хост может начать новую игру — никуда не уходи!</div>
     <br>
     <button class="big-btn grey" id="btn-new" style="width:auto;padding:11px 30px">В меню</button>
@@ -845,6 +847,7 @@
     $('#mg-title').textContent = won ? 'Победа! Ты — чемпион!' : 'Победил ' + state.players[ev.winner].name;
     $('#mg-body').innerHTML = scoreTable(ev.winner);
     $('#btn-again').style.display = (mode === 'guest') ? 'none' : '';
+    $('#btn-shuffle').style.display = (mode === 'guest') ? 'none' : '';
     $('#mg-wait').style.display = (mode === 'guest') ? '' : 'none';
     setTimeout(() => { if (state) $('#m-game').classList.add('visible'); }, 700);
   }
@@ -863,16 +866,34 @@
     show('menu');
   };
 
-  // реванш: та же комната, те же игроки, счёт с нуля
-  $('#btn-again').onclick = () => {
+  // реванш: та же комната, счёт с нуля; shuffled=true — случайная рассадка
+  function rematch(shuffled) {
     if (!state || mode === 'guest') return;
     $('#m-game').classList.remove('visible');
-    const roster = state.players.map(p => ({ name: p.name, isBot: p.isBot }));
-    state = E.createGame(roster);
+    // записи игроков с привязкой к соединениям и к себе
+    const entries = state.players.map((p, i) => ({
+      name: p.name, isBot: p.isBot,
+      conn: mode === 'host' ? conns.find(c => c.seat === i) : null,
+      wasMe: i === mySeat,
+    }));
+    if (shuffled) {
+      for (let i = entries.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [entries[i], entries[j]] = [entries[j], entries[i]];
+      }
+    }
+    entries.forEach((e, i) => {
+      if (e.conn) e.conn.seat = i;   // гости пересаживаются
+      if (e.wasMe) mySeat = i;       // и я тоже
+    });
+    state = E.createGame(entries.map(e => ({ name: e.name, isBot: e.isBot })));
     lastLogAbs = 0;
+    if (shuffled) toast('Игроков перемешали!');
     beginRound(true);
     if (mode === 'host') broadcastState();
-  };
+  }
+  $('#btn-again').onclick = () => rematch(false);
+  $('#btn-shuffle').onclick = () => rematch(true);
 
   function beginRound(firstTime) {
     trimLog();

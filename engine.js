@@ -110,68 +110,69 @@
     state.pendingWinCard = null;
     for (const p of state.players) { p.hand = []; p.roundPoints = 0; }
 
-    // Кто ходит первым: в 1-м раунде — случайно, дальше — игрок после победителя
-    let first;
+    // «Владелец» стартовой карты: победитель прошлого раунда,
+    // в 1-м раунде — случайный игрок (с него начинается раздача)
+    let origin;
     if (state.roundWinner === null) {
       const alive = alivePlayers(state);
-      first = alive[Math.floor(state._rnd() * alive.length)].idx;
+      origin = alive[Math.floor(state._rnd() * alive.length)].idx;
     } else {
-      first = nextAlive(state, state.roundWinner, +1);
+      origin = state.roundWinner;
     }
+    const first = nextAlive(state, origin, +1);
     state.dealerStart = first;
 
     // Карта победителя прошлого раунда открывает новый — вынимаем её из колоды заранее
-    let startCard = null, fromWinner = null;
+    let startCard = null;
     if (state.roundWinner !== null && state.lastWinCard) {
       const i = state.deck.findIndex(c => c.id === state.lastWinCard.id);
-      if (i >= 0) { startCard = state.deck.splice(i, 1)[0]; fromWinner = state.roundWinner; }
+      if (i >= 0) startCard = state.deck.splice(i, 1)[0];
     }
 
     // Раздача по 5, начиная с первого игрока.
-    // Победителю — 4: его пятая карта уже лежит на столе (это его победная карта).
+    // Владельцу — 4: его пятая карта идёт на стол
+    // (в 1-м раунде — последняя разданная, дальше — победная карта прошлого раунда).
     for (let k = 0; k < 5; k++) {
       let i = first;
       do {
-        if (!state.players[i].eliminated && !(k === 4 && i === fromWinner)) {
+        if (!state.players[i].eliminated && !(k === 4 && i === origin)) {
           state.players[i].hand.push(state.deck.pop());
         }
         i = (i + 1) % state.players.length;
       } while (i !== first);
     }
 
-    // Стол: карта победителя (с действующими модификаторами) либо карта из колоды (без эффекта)
+    // последняя разданная карта — на стол
     if (!startCard) startCard = state.deck.pop();
     state.pile.push(startCard);
     state.activeSuit = startCard.suit;
     state.activeRank = startCard.rank;
     state.turn = first;
     state.phase = 'playing';
-    emit(state, { type: 'roundStart', round: state.round, first, top: { ...startCard }, fromWinner });
+    emit(state, { type: 'roundStart', round: state.round, first, top: { ...startCard }, fromWinner: origin });
 
-    if (fromWinner !== null) {
-      // модификаторы карты победителя действуют так, будто он только что ей сходил
-      switch (startCard.rank) {
-        case '7':
-          state.pendingSevens = 1;
-          emit(state, { type: 'sevens', count: 1 });
-          break;
-        case '6':
-          state.mustCover = true; state.coverMode = 'once'; // закрывает первый игрок
-          break;
-        case '8':
-        case '9':
-          state.mustCover = true; state.coverMode = 'until';
-          break;
-        case 'Т':
-          if (alivePlayers(state).length === 2) {
-            state.turn = fromWinner; // дополнительный ход победителю
-            emit(state, { type: 'extraTurn', player: fromWinner });
-          } else {
-            state.turn = nextAlive(state, fromWinner, -1); // шаг назад от победителя
-          }
-          break;
-        // Д — задаёт свою масть; 10/В/К — ничего
-      }
+    // модификаторы стартовой карты действуют так, будто владелец только что ей сходил
+    switch (startCard.rank) {
+      case '7':
+        state.pendingSevens = 1;
+        emit(state, { type: 'sevens', count: 1 });
+        break;
+      case '6':
+        state.mustCover = true; state.coverMode = 'once'; // закрывает первый игрок
+        break;
+      case '8':
+      case '9':
+        state.mustCover = true; state.coverMode = 'until';
+        break;
+      case 'Т':
+        if (alivePlayers(state).length === 2) {
+          state.turn = origin; // дополнительный ход владельцу
+          emit(state, { type: 'extraTurn', player: origin });
+        } else {
+          state.turn = nextAlive(state, origin, -1); // шаг назад от владельца
+        }
+        break;
+      // Д — задаёт свою масть; 10/В/К — ничего
     }
     return state;
   }
