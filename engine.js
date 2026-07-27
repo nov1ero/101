@@ -10,7 +10,7 @@
   'use strict';
 
   const SUITS = ['♠', '♣', '♥', '♦'];
-  const RANKS = ['6', '7', '8', '9', '10', 'J', 'Q', 'К', 'A'];
+  const RANKS = ['6', '7', '8', '9', '10', 'В', 'Д', 'К', 'Т'];
   const POINTS = { '6': 6, '7': 7, '8': 8, '9': 0, '10': 10, 'В': 2, 'Д': 3, 'К': 4, 'Т': 11 };
   const ELIMINATION_LIMIT = 101;
 
@@ -212,13 +212,14 @@
       actions.push({ type: 'draw' }); // взять штраф (можно и добровольно, имея семёрку)
     } else if (state.mustCover) {
       if (state.coverMode === 'once') {
-        // после шестёрки: закрыть, взять одну карту (если ещё не брал) или спасовать
+        // после шестёрки: закрыть или взять одну карту;
+        // пас — только когда карта уже взята (или взять неоткуда)
         if (!state.drawnThisTurn && totalDrawableCards(state) > 0) actions.push({ type: 'draw' });
-        actions.push({ type: 'pass' });
+        if (state.drawnThisTurn || totalDrawableCards(state) === 0) actions.push({ type: 'pass' });
       } else {
-        // после 8/9: закрыть или добирать из колоды (даже имея чем закрыть)
+        // после 8/9: закрыть или добирать из колоды (даже имея чем закрыть), паса нет
         if (totalDrawableCards(state) > 0) actions.push({ type: 'draw' });
-        else if (plays.length === 0) actions.push({ type: 'pass' });
+        else if (plays.length === 0) actions.push({ type: 'pass' }); // тупик: нечем и неоткуда
       }
     } else {
       // брать карту можно всегда (даже если есть чем ходить), но один раз за ход

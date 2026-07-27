@@ -131,13 +131,13 @@ function rig(s, { hand0, hand1, hand2, top, turn }) {
   assert(s.turn === 0 && s.mustCover, 'после 6 ход остаётся, надо закрыть');
   const acts = E.getLegalActions(s);
   assert(acts.some(a => a.type === 'play'), 'можно закрыть');
-  assert(acts.some(a => a.type === 'draw'), 'после 6 всегда можно взять карту');
-  assert(acts.some(a => a.type === 'pass'), 'после 6 всегда можно спасовать');
+  assert(acts.some(a => a.type === 'draw'), 'можно взять карту');
+  assert(!acts.some(a => a.type === 'pass'), 'пас ДО взятия карты недоступен');
   E.applyAction(s, acts.find(a => a.type === 'play')); // К♠ закрывает
   assert(s.turn === 1 && !s.mustCover, 'после закрытия ход переходит');
 }
 {
-  // после 6 можно просто спасовать, даже не закрывая
+  // после 6: взял карту — теперь можно спасовать, даже если есть чем закрыть
   const s = E.createGame([{ name: 'A' }, { name: 'B' }], 6);
   E.startRound(s);
   rig(s, {
@@ -146,7 +146,12 @@ function rig(s, { hand0, hand1, hand2, top, turn }) {
     top: ['10', '♠'], turn: 0,
   });
   E.applyAction(s, { type: 'play', cardIndex: 0 }); // 6♠
-  E.applyAction(s, { type: 'pass' });
+  E.applyAction(s, { type: 'draw' });               // взял карту
+  if (s.turn === 0) { // взятая или К♠ позволяют закрыть — но пас теперь доступен
+    const acts = E.getLegalActions(s);
+    assert(acts.some(a => a.type === 'pass'), 'после взятия карты пас доступен');
+    E.applyAction(s, { type: 'pass' });
+  }
   assert(s.turn === 1 && !s.mustCover, 'спасовал — ход перешёл, шестёрка осталась открытой');
 }
 /* положить конкретную карту наверх колоды (следующая к взятию) */
@@ -167,7 +172,7 @@ function deckTop(s, spec) {
   });
   E.applyAction(s, { type: 'play', cardIndex: 0 }); // 6♠, в руке только В♥ — не закрывает
   assert(s.mustCover && s.coverMode === 'once' && s.turn === 0, 'должен закрыть, одна попытка');
-  assert(E.getLegalActions(s).some(a => a.type === 'pass'), 'можно и спасовать');
+  assert(!E.getLegalActions(s).some(a => a.type === 'pass'), 'пас до взятия недоступен');
   deckTop(s, ['10', '♥']); // не закрывает 6♠
   const before = s.players[0].hand.length;
   E.applyAction(s, { type: 'draw' });

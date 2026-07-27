@@ -205,7 +205,7 @@
     justify-content: center; cursor: pointer; z-index: 2; }
   .em-add { background: #e8f4e8; color: #3fa53f; font-size: 26px; font-weight: 800; }
 
-  .emote-bubble { position: fixed; z-index: 60; width: 108px; height: 108px; border-radius: 18px; background: #fff;
+  .emote-bubble { position: fixed; z-index: 60; width: 80px; height: 80px; border-radius: 18px; background: #fff;
     box-shadow: 0 8px 26px rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center;
     font-size: 72px; animation: emopop .22s ease; pointer-events: none; transition: opacity .4s; }
   .emote-bubble img { width: 100%; height: 100%; object-fit: cover; border-radius: 18px; }
@@ -555,13 +555,14 @@
       actions.push({ type: 'draw' }); // взять штраф (можно и добровольно, имея семёрку)
     } else if (state.mustCover) {
       if (state.coverMode === 'once') {
-        // после шестёрки: закрыть, взять одну карту (если ещё не брал) или спасовать
+        // после шестёрки: закрыть или взять одну карту;
+        // пас — только когда карта уже взята (или взять неоткуда)
         if (!state.drawnThisTurn && totalDrawableCards(state) > 0) actions.push({ type: 'draw' });
-        actions.push({ type: 'pass' });
+        if (state.drawnThisTurn || totalDrawableCards(state) === 0) actions.push({ type: 'pass' });
       } else {
-        // после 8/9: закрыть или добирать из колоды (даже имея чем закрыть)
+        // после 8/9: закрыть или добирать из колоды (даже имея чем закрыть), паса нет
         if (totalDrawableCards(state) > 0) actions.push({ type: 'draw' });
-        else if (plays.length === 0) actions.push({ type: 'pass' });
+        else if (plays.length === 0) actions.push({ type: 'pass' }); // тупик: нечем и неоткуда
       }
     } else {
       // брать карту можно всегда (даже если есть чем ходить), но один раз за ход
