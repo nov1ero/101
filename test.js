@@ -421,13 +421,15 @@ function deckTop(s, spec) {
   assert(top.rank === '7' && top.suit === '♠', 'новый раунд открыт картой победителя (7♠)');
   assert(s.pendingSevens === 1, 'модификатор семёрки действует');
   assert(s.turn === 1, 'первым ходит игрок после победителя');
+  assert(s.players[0].hand.length === 4, 'у победителя 4 карты (пятая — на столе)');
+  assert(s.players[1].hand.length === 5 && s.players[2].hand.length === 5, 'у остальных по 5');
   const total = s.deck.length + s.pile.length + s.players.reduce((x, p) => x + p.hand.length, 0);
   assert(total === 36, 'карты не задвоились');
   const ev = s.log.filter(e => e.type === 'roundStart').pop();
   assert(ev.fromWinner === 0, 'событие содержит источник карты');
 }
 {
-  // победа девяткой: первый игрок нового раунда обязан её закрыть
+  // победа девяткой: раунд НЕ кончается, пока следующий её не закроет (рука растёт до подсчёта)
   const s = E.createGame([{ name: 'A' }, { name: 'B' }, { name: 'C' }], 31);
   E.startRound(s);
   rig(s, {
@@ -436,11 +438,49 @@ function deckTop(s, spec) {
     hand2: [['К', '♦'], ['В', '♣'], ['10', '♥'], ['9', '♣'], ['8', '♥']],
     top: ['10', '♠'], turn: 0,
   });
-  E.applyAction(s, { type: 'play', cardIndex: 0 });
+  E.applyAction(s, { type: 'play', cardIndex: 0 }); // A вышел девяткой
+  assert(s.phase === 'playing', 'раунд ещё идёт — девятку надо закрыть');
+  assert(s.turn === 1 && s.mustCover, 'закрывает следующий игрок');
+  deckTop(s, ['К', '♥']); // не закрывает
+  E.applyAction(s, { type: 'draw' });
+  assert(s.phase === 'playing' && s.players[1].hand.length === 3, 'добирает — рука растёт');
+  deckTop(s, ['К', '♠']); // закрывает
+  E.applyAction(s, { type: 'draw' });
+  const acts = E.getLegalActions(s);
+  assert(acts.length === 1 && acts[0].type === 'play', 'обязан закрыть');
+  E.applyAction(s, acts[0]); // К♠ закрыл девятку
+  assert(s.phase === 'roundEnd' && s.roundWinner === 0, 'теперь раунд завершён, победил A');
+  assert(s.players[1].roundPoints === 2 + 2 + 4, 'B посчитан с добранными картами (В+В+К♥)');
   E.startRound(s);
   const top = s.pile[s.pile.length - 1];
-  assert(top.rank === '9' && top.suit === '♠', 'раунд открыт девяткой победителя');
+  assert(top.rank === '9' && top.suit === '♠', 'новый раунд открыт именно девяткой победителя, не закрывшей картой');
   assert(s.turn === 1 && s.mustCover && s.coverMode === 'until', 'первый игрок закрывает её до упора');
+  assert(s.players[0].hand.length === 4, 'у победителя 4 карты');
+}
+{
+  // победную девятку закрыть нечем вообще — раунд всё равно завершается
+  const s = E.createGame([{ name: 'A' }, { name: 'B' }], 34);
+  E.startRound(s);
+  rig(s, {
+    hand0: [['9', '♠']],
+    hand1: [['В', '♥']],
+    top: ['10', '♠'], turn: 0,
+  });
+  // делаем так, чтобы карт для добора не осталось: колода и стол пусты (кроме верхней)
+  s.players[1].hand.push(...s.deck); s.deck = [];
+  s.players[1].hand = s.players[1].hand.filter(c => !(c.suit === '♠' || c.rank === '9')); // нечем закрыть
+  const dumped = 36 - 1 /*top*/ - 1 /*9♠ у A*/ - s.players[1].hand.length;
+  // лишние карты «сгружаем» в низ стола, чтобы не терять (их не добрать — верхняя остаётся)
+  E.applyAction(s, { type: 'play', cardIndex: 0 }); // A вышел девяткой
+  assert(s.phase === 'playing' && s.turn === 1, 'B должен закрывать');
+  // B добирает всё, что есть, не может закрыть — coverFail → раунд завершается за A
+  let guard = 50;
+  while (s.phase === 'playing' && guard-- > 0) {
+    const a = E.getLegalActions(s)[0];
+    E.applyAction(s, a);
+  }
+  assert(s.phase === 'roundEnd' || s.phase === 'gameEnd', 'раунд завершился');
+  assert(s.roundWinner === 0, 'победил A, вышедший девяткой');
 }
 {
   // победа тузом при 3 игроках: первый ход уходит назад от победителя

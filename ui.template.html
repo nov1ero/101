@@ -271,7 +271,10 @@
     <div id="confetti">🏆</div>
     <h2 id="mg-title"></h2>
     <div id="mg-body"></div>
-    <button class="big-btn" id="btn-new" style="padding:12px 40px;font-size:17px;width:auto">В меню</button>
+    <button class="big-btn" id="btn-again" style="padding:12px 40px;font-size:17px;width:auto;margin-bottom:10px">🔄 Играть ещё</button>
+    <div class="sub" id="mg-wait" style="display:none;margin-bottom:10px">Хост может начать новую игру — никуда не уходи!</div>
+    <br>
+    <button class="big-btn grey" id="btn-new" style="width:auto;padding:11px 30px">В меню</button>
   </div>
 </div>
 
@@ -510,11 +513,15 @@
     }
     if (msg.t === 'state') {
       const before = state ? snapRects() : null;
-      const prevAbs = lastLogAbs;
       state = msg.s;
       mySeat = msg.seat;
+      if (lastLogAbs > logAbsLen(state)) lastLogAbs = 0; // хост начал новую игру — журнал обнулился
+      const prevAbs = lastLogAbs;
       if (!$('#game').classList.contains('visible')) show('game');
-      if (state.phase === 'playing' || state.phase === 'chooseSuit') $('#m-round').classList.remove('visible');
+      if (state.phase === 'playing' || state.phase === 'chooseSuit') {
+        $('#m-round').classList.remove('visible');
+        $('#m-game').classList.remove('visible');
+      }
       render();
       const events = state.log.slice(Math.max(0, prevAbs - logBase(state)));
       animateEvents(events, before);
@@ -837,6 +844,8 @@
     $('#confetti').textContent = won ? '🏆' : '🤖';
     $('#mg-title').textContent = won ? 'Победа! Ты — чемпион!' : 'Победил ' + state.players[ev.winner].name;
     $('#mg-body').innerHTML = scoreTable(ev.winner);
+    $('#btn-again').style.display = (mode === 'guest') ? 'none' : '';
+    $('#mg-wait').style.display = (mode === 'guest') ? '' : 'none';
     setTimeout(() => { if (state) $('#m-game').classList.add('visible'); }, 700);
   }
 
@@ -852,6 +861,17 @@
     clearTimeout(botTimer);
     cleanupNet();
     show('menu');
+  };
+
+  // реванш: та же комната, те же игроки, счёт с нуля
+  $('#btn-again').onclick = () => {
+    if (!state || mode === 'guest') return;
+    $('#m-game').classList.remove('visible');
+    const roster = state.players.map(p => ({ name: p.name, isBot: p.isBot }));
+    state = E.createGame(roster);
+    lastLogAbs = 0;
+    beginRound(true);
+    if (mode === 'host') broadcastState();
   };
 
   function beginRound(firstTime) {

@@ -67,6 +67,8 @@
       mustCover: false,   // текущий игрок обязан закрыть верхнюю карту
       coverMode: null,    // 'once' (после 6 — одна попытка добора) | 'until' (после 8/9 — добор до упора)
       lastWinCard: null,  // последняя карта победителя раунда — открывает следующий раунд
+      pendingWinner: null,   // игрок вышел девяткой — ждём, пока её закроют
+      pendingWinCard: null,  // сама победная карта (для следующего раунда)
       drawnThisTurn: false, // игрок уже взял карту на обычном ходу
       phase: 'lobby',     // lobby | playing | chooseSuit | roundEnd | gameEnd
       round: 0,
@@ -104,6 +106,8 @@
     state.mustCover = false;
     state.coverMode = null;
     state.drawnThisTurn = false;
+    state.pendingWinner = null;
+    state.pendingWinCard = null;
     for (const p of state.players) { p.hand = []; p.roundPoints = 0; }
 
     // Кто ходит первым: в 1-м раунде — случайно, дальше — игрок после победителя
@@ -123,11 +127,14 @@
       if (i >= 0) { startCard = state.deck.splice(i, 1)[0]; fromWinner = state.roundWinner; }
     }
 
-    // Раздача по 5, начиная с первого игрока
+    // Раздача по 5, начиная с первого игрока.
+    // Победителю — 4: его пятая карта уже лежит на столе (это его победная карта).
     for (let k = 0; k < 5; k++) {
       let i = first;
       do {
-        if (!state.players[i].eliminated) state.players[i].hand.push(state.deck.pop());
+        if (!state.players[i].eliminated && !(k === 4 && i === fromWinner)) {
+          state.players[i].hand.push(state.deck.pop());
+        }
         i = (i + 1) % state.players.length;
       } while (i !== first);
     }
@@ -270,6 +277,9 @@
       state.drawnThisTurn = false;
       emit(state, { type: 'play', player: player.idx, card: { ...card } });
 
+      // победная девятка закрыта — раунд завершается (эффекты закрывшей карты не действуют)
+      if (state.pendingWinner !== null) return endRound(state, state.pendingWinner);
+
       // --- эффекты карт ---
       switch (card.rank) {
         case '6':
@@ -290,8 +300,12 @@
           break;
 
         case '9':
-          // следующий игрок обязан закрыть девятку, добирая до упора
-          if (player.hand.length === 0) return endRound(state, player.idx);
+          // следующий игрок обязан закрыть девятку, добирая до упора.
+          // Если это была последняя карта — раунд НЕ кончается, пока девятку не закроют
+          if (player.hand.length === 0) {
+            state.pendingWinner = player.idx;
+            state.pendingWinCard = { ...card };
+          }
           advanceTurn(state);
           state.mustCover = true;
           state.coverMode = 'until';
@@ -340,6 +354,7 @@
           state.mustCover = false;
           state.coverMode = null;
           emit(state, { type: 'coverFail', player: player.idx });
+          if (state.pendingWinner !== null) return endRound(state, state.pendingWinner);
           if (player.hand.length === 0) return endRound(state, player.idx);
           advanceTurn(state);
           return state;
@@ -370,6 +385,7 @@
       const wasCover = state.mustCover;
       state.mustCover = false;
       state.coverMode = null;
+      if (state.pendingWinner !== null) return endRound(state, state.pendingWinner);
       // сыграл последнюю 6/8, а закрыть нечем и взять неоткуда — победа
       if (wasCover && player.hand.length === 0) return endRound(state, player.idx);
       advanceTurn(state);
@@ -392,8 +408,11 @@
     }
 
     state.roundWinner = winnerIdx;
-    // последняя карта победителя откроет следующий раунд (со своими модификаторами)
-    state.lastWinCard = { ...state.pile[state.pile.length - 1] };
+    // последняя карта победителя откроет следующий раунд (со своими модификаторами);
+    // если победную девятку закрывали — берём именно её, а не закрывшую карту
+    state.lastWinCard = state.pendingWinCard || { ...state.pile[state.pile.length - 1] };
+    state.pendingWinner = null;
+    state.pendingWinCard = null;
     state.mustCover = false;
     state.coverMode = null;
     const results = [];
