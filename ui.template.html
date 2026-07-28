@@ -196,6 +196,22 @@
     font-size: 14px; padding: 3px 6px; }
   .ava img { width: 100%; height: 100%; object-fit: cover; border-radius: 10px; }
 
+  /* ---------- друзья и приглашения ---------- */
+  .fr-st { font-size: 12px; opacity: .85; display: block; }
+  .fr-act { margin-left: auto; display: flex; gap: 6px; }
+  .fr-btn { border: none; border-radius: 10px; padding: 7px 10px; font-size: 13px; font-weight: 700; cursor: pointer; color: #fff; }
+  .fr-btn.call { background: linear-gradient(180deg, #6fd06f, #3fa53f); }
+  .fr-btn.join { background: linear-gradient(180deg, #5f93c4, #3e6c9b); }
+  .fr-btn.del { background: rgba(255,255,255,.15); }
+  #inv-banner { position: fixed; top: calc(env(safe-area-inset-top) + 10px); left: 50%; transform: translateX(-50%);
+    z-index: 90; background: #35506b; border: 2px solid #ffcf5c; border-radius: 16px; padding: 10px 12px;
+    display: none; align-items: center; gap: 10px; box-shadow: 0 8px 30px rgba(0,0,0,.5); max-width: 94vw;
+    font-size: 14px; font-weight: 600; }
+  #inv-banner.visible { display: flex; }
+  .inv-btn { border: none; border-radius: 12px; padding: 8px 14px; font-weight: 700; cursor: pointer; color: #fff; font-size: 14px; }
+  .inv-btn.go { background: linear-gradient(180deg, #6fd06f, #3fa53f); }
+  .inv-btn.no { background: rgba(255,255,255,.15); padding: 8px 10px; }
+
   /* ---------- выход из игры ---------- */
   #btn-back { position: absolute; top: calc(env(safe-area-inset-top) + 8px); left: 8px; z-index: 25;
     width: 40px; height: 40px; border-radius: 12px; border: none; background: rgba(0,0,0,.35); color: #fff;
@@ -242,6 +258,7 @@
   <input class="txt" id="inp-name" maxlength="12" placeholder="Твоё имя">
   <button class="big-btn" id="btn-mode-bots">🤖 Играть с ботами</button>
   <button class="big-btn blue" id="btn-mode-net">👥 Играть с людьми</button>
+  <button class="big-btn blue" id="btn-friends" style="display:none">💛 Друзья</button>
   <div class="sub">Скинь все карты раньше всех. Набрал больше 101 очка — вылетел. Ровно 101 — очки сгорают!</div>
   <div class="sub" id="menu-status" style="color:#ffb3b3"></div>
 </div>
@@ -268,11 +285,24 @@
   <button class="big-btn grey" data-back>← Назад</button>
 </div>
 
+<!-- ДРУЗЬЯ -->
+<div id="friends" class="screen center-screen">
+  <h2 style="font-size:24px">Друзья</h2>
+  <div style="display:flex;gap:8px;align-items:center">
+    <input class="txt code" id="inp-fcode" maxlength="6" placeholder="КОД" style="width:170px;font-size:18px;letter-spacing:4px">
+    <button class="big-btn" id="btn-fadd" style="width:auto;padding:13px 18px;font-size:15px">Добавить</button>
+  </div>
+  <div class="sub" id="fr-status"></div>
+  <div class="room-list" id="fr-list" style="max-height:44vh;overflow-y:auto"></div>
+  <button class="big-btn grey" id="btn-fr-back">← Назад</button>
+</div>
+
 <!-- КОМНАТА -->
 <div id="room" class="screen center-screen">
   <div class="sub">Код комнаты — скажи его друзьям:</div>
   <div class="room-code" id="room-code"></div>
   <div class="room-list" id="room-list"></div>
+  <button class="big-btn grey" id="btn-invite" style="display:none">💛 Пригласить друзей</button>
   <button class="big-btn grey" id="btn-add-bot" style="display:none">+ Добавить бота</button>
   <button class="big-btn" id="btn-start-net" style="display:none" disabled>Начать игру</button>
   <div class="sub" id="room-status"></div>
@@ -300,6 +330,13 @@
 
 <input type="file" id="em-file" accept="image/*" style="display:none">
 <input type="file" id="av-file" accept="image/*" style="display:none">
+
+<!-- БАННЕР ПРИГЛАШЕНИЯ -->
+<div id="inv-banner">
+  <span id="inv-text"></span>
+  <button class="inv-btn go" id="inv-go">Играть</button>
+  <button class="inv-btn no" id="inv-no">✕</button>
+</div>
 
 <!-- ПРОФИЛЬ -->
 <div class="modal-wrap" id="m-profile">
@@ -453,6 +490,10 @@ window.CLOUDINARY_CONFIG = {
     return a ? '<img src="' + a.replace(/"/g, '') + '" alt="">' : fallback;
   }
 
+  let friendsList = [];
+  let invitesList = [];
+  let friendsBackTo = 'menu';
+
   (function initProfiles() {
     const P = window.Profiles;
     const enabled = P && P.available();
@@ -464,6 +505,7 @@ window.CLOUDINARY_CONFIG = {
         else { myAvatar = null; }
         $('#btn-signin').style.display = pr ? 'none' : '';
         $('#profile-chip').style.display = pr ? 'flex' : 'none';
+        $('#btn-friends').style.display = pr ? '' : 'none';
         $('#inp-name').style.display = pr ? 'none' : '';
         if (pr) {
           $('#pc-name').textContent = pr.name;
@@ -476,6 +518,14 @@ window.CLOUDINARY_CONFIG = {
       onStatus(msg) {
         $('#menu-status').textContent = msg;
         setTimeout(() => { $('#menu-status').textContent = ''; }, 6000);
+      },
+      onFriends(list) {
+        friendsList = list.sort((a, b) => (b.online - a.online) || a.name.localeCompare(b.name));
+        if ($('#friends').classList.contains('visible')) renderFriends();
+      },
+      onInvites(list) {
+        invitesList = list;
+        renderInviteBanner();
       },
     });
     $('#btn-signin').onclick = () => P.signIn();
@@ -490,6 +540,77 @@ window.CLOUDINARY_CONFIG = {
       const code = $('#pf-code').textContent;
       try { navigator.clipboard.writeText(code); $('#btn-pf-copy').textContent = '✓'; setTimeout(() => $('#btn-pf-copy').textContent = '📋', 1200); } catch (e) {}
     };
+    /* --- друзья --- */
+    $('#btn-friends').onclick = () => { friendsBackTo = 'menu'; frStatus(''); renderFriends(); show('friends'); };
+    $('#btn-invite').onclick = () => { friendsBackTo = 'room'; frStatus('Позови друга в комнату ' + roomCode); renderFriends(); show('friends'); };
+    $('#btn-fr-back').onclick = () => show(friendsBackTo);
+    $('#btn-fadd').onclick = async () => {
+      const code = $('#inp-fcode').value;
+      frStatus('Ищу игрока…');
+      try {
+        await P.addFriendByCode(code);
+        $('#inp-fcode').value = '';
+        frStatus('✅ Друг добавлен!');
+      } catch (e) { frStatus('Не получилось: ' + (e.message || e.code || e)); }
+    };
+
+    function frStatus(t) { $('#fr-status').textContent = t; }
+
+    window.renderFriends = function renderFriends() {
+      const list = $('#fr-list');
+      list.innerHTML = '';
+      if (!friendsList.length) {
+        list.innerHTML = '<div class="sub">Пока пусто. Обменяйтесь кодами из профиля —<br>и добавьте друг друга.</div>';
+        return;
+      }
+      for (const f of friendsList) {
+        const d = document.createElement('div');
+        d.className = 'room-p';
+        const st = f.room ? '🎮 в комнате ' + esc(f.room) : (f.online ? '🟢 онлайн' : '⚫ не в сети');
+        d.innerHTML = '<span class="a pc-ava">' + avaHTML(f.photo, '👤') + '</span>' +
+          '<span>' + esc(f.name) + '<span class="fr-st">' + st + '</span></span>' +
+          '<span class="fr-act"></span>';
+        const act = d.querySelector('.fr-act');
+        // позвать в мою комнату
+        if (roomCode && f.online && f.room !== roomCode) {
+          const b = document.createElement('button');
+          b.className = 'fr-btn call';
+          b.textContent = 'Позвать';
+          b.onclick = async () => {
+            b.disabled = true; b.textContent = '✓';
+            try { await P.sendInvite(f.uid, roomCode); frStatus('Приглашение отправлено: ' + f.name); }
+            catch (e) { frStatus('Не отправилось: ' + (e.message || e.code)); b.disabled = false; b.textContent = 'Позвать'; }
+          };
+          act.appendChild(b);
+        }
+        // зайти к другу в комнату
+        if (f.room && f.room !== roomCode) {
+          const b = document.createElement('button');
+          b.className = 'fr-btn join';
+          b.textContent = 'Зайти';
+          b.onclick = () => joinRoom(f.room);
+          act.appendChild(b);
+        }
+        const del = document.createElement('button');
+        del.className = 'fr-btn del';
+        del.textContent = '✕';
+        del.onclick = async () => { if (confirm('Удалить ' + f.name + ' из друзей?')) { try { await P.removeFriend(f.uid); } catch (e) {} } };
+        act.appendChild(del);
+        list.appendChild(d);
+      }
+    };
+
+    /* --- баннер приглашения --- */
+    window.renderInviteBanner = function renderInviteBanner() {
+      const b = $('#inv-banner');
+      const inv = invitesList.find(i => i.room !== roomCode); // в свою комнату не зовём
+      if (!inv) { b.classList.remove('visible'); return; }
+      $('#inv-text').textContent = inv.fromName + ' зовёт в комнату ' + inv.room;
+      $('#inv-go').onclick = () => { P.deleteInvite(inv.id); b.classList.remove('visible'); joinRoom(inv.room); };
+      $('#inv-no').onclick = () => { P.deleteInvite(inv.id); b.classList.remove('visible'); };
+      b.classList.add('visible');
+    };
+
     $('#pf-ava-btn').onclick = () => $('#av-file').click();
     $('#av-file').onchange = async () => {
       const f = $('#av-file').files[0];
@@ -670,9 +791,16 @@ window.CLOUDINARY_CONFIG = {
   }
 
   /* ================= СЕТЬ: ГОСТЬ ================= */
-  $('#btn-join').onclick = () => {
-    const code = $('#inp-code').value.trim().toUpperCase();
+  $('#btn-join').onclick = () => joinRoom($('#inp-code').value);
+
+  function joinRoom(codeRaw) {
+    const code = String(codeRaw || '').trim().toUpperCase();
+    if (typeof Peer === 'undefined') { alert('Для игры с людьми нужен интернет.'); return; }
     if (code.length !== 4) { $('#net-status').textContent = 'Введи код из 4 символов'; return; }
+    cleanupNet();           // выходим из текущей игры/комнаты, если были
+    getName();
+    show('net-menu');
+    $('#inp-code').value = code;
     $('#net-status').textContent = 'Подключаюсь…';
     peer = new Peer();
     peer.on('open', () => {
@@ -695,7 +823,7 @@ window.CLOUDINARY_CONFIG = {
       });
     });
     peer.on('error', err => { $('#net-status').textContent = 'Ошибка: ' + (err.type === 'peer-unavailable' ? 'комната не найдена' : err.type); });
-  };
+  }
 
   function onHostMessage(msg) {
     if (!msg) return;
@@ -737,6 +865,8 @@ window.CLOUDINARY_CONFIG = {
       list.appendChild(d);
     });
     if (mode === 'host' || !mode) $('#btn-start-net').disabled = roomPlayers.length < 2;
+    // пригласить друзей могут и хост, и гость — если вошли в профиль
+    $('#btn-invite').style.display = (window.Profiles && window.Profiles.get()) ? '' : 'none';
   }
   function esc(s) { return String(s).replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c])); }
 

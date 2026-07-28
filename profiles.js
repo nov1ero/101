@@ -11,6 +11,11 @@ window.Profiles = (function () {
   let hooks = {};
   let hb = null;           // heartbeat-таймер
   let currentRoom = null;
+  // друзья и приглашения
+  let subs = [];           // отписки от основных слушателей
+  let friendSubs = {};     // uid друга -> отписка от его users-документа
+  let friendsData = {};    // uid -> {uid, name, photo, online, room}
+  let friendSet = new Set();
 
   function available() {
     return !!(window.FBSDK && window.FIREBASE_CONFIG && window.FIREBASE_CONFIG.apiKey);
@@ -31,7 +36,7 @@ window.Profiles = (function () {
     // завершение redirect-входа (мобильные)
     try { await S.getRedirectResult(auth); } catch (e) {}
     S.onAuthStateChanged(auth, async (u) => {
-      if (!u) { profile = null; stopHeartbeat(); emitUser(); return; }
+      if (!u) { profile = null; stopHeartbeat(); stopWatchers(); emitUser(); return; }
       try {
         profile = await ensureUserDoc(u);
       } catch (e) {
@@ -40,6 +45,7 @@ window.Profiles = (function () {
         status('Профиль не загружен: ' + (e.code || e.message || e));
       }
       startHeartbeat();
+      startWatchers();
       emitUser();
     });
     return true;
@@ -171,5 +177,102 @@ window.Profiles = (function () {
 
   function get() { return profile; }
 
-  return { available, init, signIn, signOutUser, setName, setAvatarFile, setRoom, get };
+  /* ---------- друзья и приглашения ---------- */
+  function stopWatchers() {
+    subs.forEach(u => { try { u(); } catch (e) {} });
+    subs = [];
+    Object.values(friendSubs).forEach(u => { try { u(); } catch (e) {} });
+    friendSubs = {}; friendsData = {}; friendSet = new Set();
+    if (hooks.onFriends) hooks.onFriends([]);
+    if (hooks.onInvites) hooks.onInvites([]);
+  }
+
+  function emitFriends() { if (hooks.onFriends) hooks.onFriends(Object.values(friendsData)); }
+
+  function startWatchers() {
+    stopWatchers();
+    if (!profile) return;
+    const uid = profile.uid;
+
+    const handleShips = (snap) => {
+      snap.docChanges().forEach(ch => {
+        const d = ch.doc.data();
+        const fuid = d.a === uid ? d.b : d.a;
+        if (ch.type === 'removed') {
+          friendSet.delete(fuid);
+          if (friendSubs[fuid]) { try { friendSubs[fuid](); } catch (e) {} delete friendSubs[fuid]; }
+          delete friendsData[fuid];
+        } else if (!friendSet.has(fuid)) {
+          friendSet.add(fuid);
+          // живой профиль каждого друга: имя, фото, онлайн, комната
+          friendSubs[fuid] = S.onSnapshot(S.doc(db, 'users', fuid), (us) => {
+            const u = us.data() || {};
+            const last = u.lastSeen && u.lastSeen.toMillis ? u.lastSeen.toMillis() : 0;
+            friendsData[fuid] = {
+              uid: fuid,
+              name: u.name || 'Игрок',
+              photo: u.photo || null,
+              room: u.room || null,
+              online: (Date.now() - last) < 150000, // «пульс» был меньше 2.5 мин назад
+            };
+            emitFriends();
+          }, () => {});
+        }
+      });
+      emitFriends();
+    };
+    subs.push(S.onSnapshot(S.query(S.collection(db, 'friendships'), S.where('a', '==', uid)), handleShips, () => {}));
+    subs.push(S.onSnapshot(S.query(S.collection(db, 'friendships'), S.where('b', '==', uid)), handleShips, () => {}));
+
+    // входящие приглашения (протухшие тихо удаляем)
+    subs.push(S.onSnapshot(S.query(S.collection(db, 'invites'), S.where('to', '==', uid)), (snap) => {
+      const now = Date.now();
+      const list = [];
+      snap.forEach(d => {
+        const v = d.data();
+        const ts = v.ts && v.ts.toMillis ? v.ts.toMillis() : now;
+        if (now - ts < 120000) {
+          list.push({ id: d.id, from: v.from, fromName: String(v.fromName || 'Друг').slice(0, 14), room: String(v.room || '').slice(0, 8) });
+        } else {
+          S.deleteDoc(S.doc(db, 'invites', d.id)).catch(() => {});
+        }
+      });
+      if (hooks.onInvites) hooks.onInvites(list);
+    }, () => {}));
+  }
+
+  async function addFriendByCode(code) {
+    if (!profile) throw new Error('нет профиля');
+    code = String(code).trim().toUpperCase();
+    if (code.length !== 6) throw new Error('код состоит из 6 символов');
+    if (code === profile.code) throw new Error('это твой собственный код');
+    const snap = await S.getDoc(S.doc(db, 'friendCodes', code));
+    if (!snap.exists()) throw new Error('игрок с таким кодом не найден');
+    const fuid = snap.data().uid;
+    if (fuid === profile.uid) throw new Error('это твой собственный код');
+    const [a, b] = [profile.uid, fuid].sort();
+    await S.setDoc(S.doc(db, 'friendships', a + '_' + b), { a, b });
+  }
+
+  async function removeFriend(fuid) {
+    if (!profile) return;
+    const [a, b] = [profile.uid, fuid].sort();
+    await S.deleteDoc(S.doc(db, 'friendships', a + '_' + b));
+  }
+
+  async function sendInvite(toUid, room) {
+    if (!profile) throw new Error('нет профиля');
+    await S.addDoc(S.collection(db, 'invites'), {
+      to: toUid, from: profile.uid, fromName: profile.name, room, ts: S.serverTimestamp(),
+    });
+  }
+
+  async function deleteInvite(id) {
+    try { await S.deleteDoc(S.doc(db, 'invites', id)); } catch (e) {}
+  }
+
+  return {
+    available, init, signIn, signOutUser, setName, setAvatarFile, setRoom, get,
+    addFriendByCode, removeFriend, sendInvite, deleteInvite,
+  };
 })();
