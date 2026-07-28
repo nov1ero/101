@@ -181,6 +181,21 @@
 
   #confetti { font-size: 56px; margin-bottom: 8px; }
 
+  /* ---------- профиль ---------- */
+  #profile-chip { display: flex; align-items: center; gap: 10px; padding: 8px 18px 8px 8px; border-radius: 26px;
+    border: 2px solid rgba(255,255,255,.25); background: rgba(255,255,255,.1); color: #fff; font-size: 16px;
+    font-weight: 700; cursor: pointer; }
+  .pc-ava { width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,.15); display: flex;
+    align-items: center; justify-content: center; font-size: 19px; overflow: hidden; }
+  .pc-ava img { width: 100%; height: 100%; object-fit: cover; }
+  .pf-ava-wrap { width: 96px; height: 96px; border-radius: 24px; margin: 0 auto; background: rgba(255,255,255,.12);
+    display: flex; align-items: center; justify-content: center; font-size: 46px; cursor: pointer; position: relative;
+    overflow: hidden; border: 2px solid rgba(255,255,255,.25); }
+  .pf-ava-wrap img { width: 100%; height: 100%; object-fit: cover; }
+  .pf-ava-edit { position: absolute; right: 2px; bottom: 2px; background: rgba(0,0,0,.55); border-radius: 10px;
+    font-size: 14px; padding: 3px 6px; }
+  .ava img { width: 100%; height: 100%; object-fit: cover; border-radius: 10px; }
+
   /* ---------- выход из игры ---------- */
   #btn-back { position: absolute; top: calc(env(safe-area-inset-top) + 8px); left: 8px; z-index: 25;
     width: 40px; height: 40px; border-radius: 12px; border: none; background: rgba(0,0,0,.35); color: #fff;
@@ -220,10 +235,15 @@
 <!-- ГЛАВНОЕ МЕНЮ -->
 <div id="menu" class="screen center-screen visible">
   <h1 class="logo">101<span class="suits">♠ <span class="red">♥</span> ♣ <span class="red">♦</span></span></h1>
+  <button id="profile-chip" style="display:none">
+    <span class="pc-ava" id="pc-ava">👤</span><span id="pc-name"></span><span style="opacity:.6">›</span>
+  </button>
+  <button class="big-btn blue" id="btn-signin" style="display:none">Войти через Google</button>
   <input class="txt" id="inp-name" maxlength="12" placeholder="Твоё имя">
   <button class="big-btn" id="btn-mode-bots">🤖 Играть с ботами</button>
   <button class="big-btn blue" id="btn-mode-net">👥 Играть с людьми</button>
   <div class="sub">Скинь все карты раньше всех. Набрал больше 101 очка — вылетел. Ровно 101 — очки сгорают!</div>
+  <div class="sub" id="menu-status" style="color:#ffb3b3"></div>
 </div>
 
 <!-- ЛОББИ С БОТАМИ -->
@@ -279,6 +299,25 @@
 </div>
 
 <input type="file" id="em-file" accept="image/*" style="display:none">
+<input type="file" id="av-file" accept="image/*" style="display:none">
+
+<!-- ПРОФИЛЬ -->
+<div class="modal-wrap" id="m-profile">
+  <div class="modal">
+    <div class="pf-ava-wrap" id="pf-ava-btn" title="Сменить фото">
+      <span id="pf-ava">👤</span>
+      <div class="pf-ava-edit">📷</div>
+    </div>
+    <input class="txt" id="pf-name" maxlength="12" placeholder="Имя" style="margin:12px 0;width:100%">
+    <button class="big-btn" id="btn-pf-save" style="width:auto;padding:11px 32px;font-size:16px;margin-bottom:14px">Сохранить имя</button>
+    <div class="note">Твой код друга: <b id="pf-code" style="letter-spacing:2px;color:#ffcf5c">—</b>
+      <button id="btn-pf-copy" style="border:none;background:rgba(255,255,255,.15);color:#fff;border-radius:8px;padding:4px 10px;cursor:pointer;margin-left:6px">📋</button>
+      <br>Скажи его друзьям, чтобы они добавили тебя.</div>
+    <button class="big-btn grey" id="btn-signout" style="margin-bottom:10px">Выйти из аккаунта</button>
+    <br>
+    <button class="big-btn grey" id="btn-pf-close" style="width:120px">Закрыть</button>
+  </div>
+</div>
 
 <!-- ВЫХОД ИЗ ИГРЫ -->
 <div class="modal-wrap" id="m-exit">
@@ -330,6 +369,29 @@
 </div>
 
 <script>
+// ==== Конфиг Firebase (профили). Пустой apiKey = профили выключены ====
+window.FIREBASE_CONFIG = {
+  apiKey: "AIzaSyDjCGFj2N_Qxdl-mK5BBBSvXztJLUw6j3c",
+  authDomain: "st-o-din.firebaseapp.com",
+  projectId: "st-o-din",
+  storageBucket: "st-o-din.firebasestorage.app",
+  messagingSenderId: "801173796192",
+  appId: "1:801173796192:web:8adda143f581eb2c0dda05"
+};
+// ==== Cloudinary (загрузка фото-аватарок). Пустые значения = загрузка фото выключена,
+// ==== аватарка тогда берётся из Google-аккаунта ====
+window.CLOUDINARY_CONFIG = {
+  cloudName: "dgfadsoip",
+  uploadPreset: "avatars"   // unsigned upload preset
+};
+</script>
+<script>
+//__FIREBASE__//
+</script>
+<script>
+//__PROFILES__//
+</script>
+<script>
 //__PEERJS__//
 </script>
 <script>
@@ -354,6 +416,7 @@
   let botTimer = null;
   let playerCount = 3;
   let myName = '';
+  let myAvatar = null; // URL фото из профиля
 
   // сеть
   let peer = null;        // PeerJS
@@ -372,12 +435,74 @@
   document.querySelectorAll('[data-back]').forEach(b => b.onclick = () => { cleanupNet(); show('menu'); });
 
   function getName() {
+    const P = window.Profiles;
+    if (P && P.get()) { myName = P.get().name; return myName; } // имя из профиля
     const v = $('#inp-name').value.trim();
     myName = v || 'Игрок';
     try { localStorage.setItem('d101name', myName); } catch (e) {}
     return myName;
   }
   $('#inp-name').value = myName;
+
+  /* ================= ПРОФИЛЬ (Firebase) ================= */
+  function safeAvatar(url) {
+    return (typeof url === 'string' && /^https:\/\//.test(url) && url.length < 600) ? url : null;
+  }
+  function avaHTML(avatar, fallback) {
+    const a = safeAvatar(avatar);
+    return a ? '<img src="' + a.replace(/"/g, '') + '" alt="">' : fallback;
+  }
+
+  (function initProfiles() {
+    const P = window.Profiles;
+    const enabled = P && P.available();
+    if (!enabled) return; // конфиг пуст или SDK не собран — игра как раньше
+    $('#btn-signin').style.display = '';
+    P.init({
+      onUser(pr) {
+        if (pr) { myName = pr.name; myAvatar = pr.photo; }
+        else { myAvatar = null; }
+        $('#btn-signin').style.display = pr ? 'none' : '';
+        $('#profile-chip').style.display = pr ? 'flex' : 'none';
+        $('#inp-name').style.display = pr ? 'none' : '';
+        if (pr) {
+          $('#pc-name').textContent = pr.name;
+          $('#pc-ava').innerHTML = avaHTML(pr.photo, '👤');
+          $('#pf-ava').innerHTML = avaHTML(pr.photo, '👤');
+          $('#pf-name').value = pr.name;
+          $('#pf-code').textContent = pr.code || '—';
+        }
+      },
+      onStatus(msg) {
+        $('#menu-status').textContent = msg;
+        setTimeout(() => { $('#menu-status').textContent = ''; }, 6000);
+      },
+    });
+    $('#btn-signin').onclick = () => P.signIn();
+    $('#profile-chip').onclick = () => $('#m-profile').classList.add('visible');
+    $('#btn-pf-close').onclick = () => $('#m-profile').classList.remove('visible');
+    $('#btn-signout').onclick = async () => { await P.signOutUser(); $('#m-profile').classList.remove('visible'); };
+    $('#btn-pf-save').onclick = async () => {
+      try { await P.setName($('#pf-name').value); $('#m-profile').classList.remove('visible'); }
+      catch (e) { $('#menu-status').textContent = 'Не сохранилось: ' + (e.code || e.message); }
+    };
+    $('#btn-pf-copy').onclick = () => {
+      const code = $('#pf-code').textContent;
+      try { navigator.clipboard.writeText(code); $('#btn-pf-copy').textContent = '✓'; setTimeout(() => $('#btn-pf-copy').textContent = '📋', 1200); } catch (e) {}
+    };
+    $('#pf-ava-btn').onclick = () => $('#av-file').click();
+    $('#av-file').onchange = async () => {
+      const f = $('#av-file').files[0];
+      $('#av-file').value = '';
+      if (!f) return;
+      $('#pf-ava').innerHTML = '⏳';
+      try { await P.setAvatarFile(f); }
+      catch (e) {
+        $('#pf-ava').innerHTML = avaHTML(myAvatar, '👤');
+        $('#menu-status').textContent = 'Фото не загрузилось: ' + (e.code || e.message);
+      }
+    };
+  })();
 
   /* ================= МЕНЮ ================= */
   $('#btn-mode-bots').onclick = () => { getName(); show('lobby-bots'); };
@@ -400,7 +525,8 @@
 
   $('#btn-start-bots').onclick = () => {
     mode = 'bots'; mySeat = 0;
-    const players = [{ name: myName, isBot: false }];
+    getName();
+    const players = [{ name: myName, isBot: false, avatar: myAvatar }];
     for (let i = 0; i < playerCount - 1; i++) players.push({ name: BOT_NAMES[i], isBot: true });
     state = E.createGame(players);
     lastLogAbs = 0;
@@ -410,6 +536,7 @@
   /* ================= СЕТЬ: ОБЩЕЕ ================= */
   function cleanupNet() {
     clearTimeout(botTimer);
+    if (window.Profiles) window.Profiles.setRoom(null);
     if (peer) { try { peer.destroy(); } catch (e) {} }
     peer = null; conns = []; hostConn = null; roomCode = ''; roomPlayers = [];
     state = null; mode = null;
@@ -450,7 +577,8 @@
     peer = new Peer(PEER_PREFIX + code.toLowerCase());
     peer.on('open', () => {
       mode = 'host'; mySeat = 0; roomCode = code;
-      roomPlayers = [{ name: myName, isBot: false }];
+      if (window.Profiles) window.Profiles.setRoom(code);
+      roomPlayers = [{ name: myName, isBot: false, avatar: myAvatar }];
       $('#room-code').textContent = code;
       $('#btn-start-net').style.display = '';
       $('#btn-add-bot').style.display = '';
@@ -470,11 +598,12 @@
       if (msg && msg.t === 'hello') {
         if (state || roomPlayers.length >= 5) { conn.send({ t: 'full' }); setTimeout(() => conn.close(), 500); return; }
         const name = String(msg.name || 'Гость').slice(0, 12);
+        const avatar = safeAvatar(msg.avatar);
         const seat = roomPlayers.length;
-        roomPlayers.push({ name, isBot: false });
+        roomPlayers.push({ name, isBot: false, avatar });
         conns.push({ conn, name, seat });
         renderRoom();
-        broadcast({ t: 'room', names: roomPlayers.map(p => p.name + (p.isBot ? ' 🤖' : '')), code: roomCode });
+        broadcastRoom();
       } else if (msg && msg.t === 'act') {
         const from = conns.find(c => c.conn === conn);
         if (!from || !state) return;
@@ -507,10 +636,14 @@
         roomPlayers.splice(c.seat, 1);
         conns.forEach(x => { if (x.seat > c.seat) x.seat--; });
         renderRoom();
-        broadcast({ t: 'room', names: roomPlayers.map(p => p.name + (p.isBot ? ' 🤖' : '')), code: roomCode });
+        broadcastRoom();
       }
       render();
     });
+  }
+
+  function broadcastRoom() {
+    broadcast({ t: 'room', players: roomPlayers.map(p => ({ n: p.name, a: p.avatar || null, b: !!p.isBot })), code: roomCode });
   }
 
   $('#btn-add-bot').onclick = () => {
@@ -519,12 +652,12 @@
     const nm = BOT_NAMES.find(n => !used.includes(n)) || 'Бот';
     roomPlayers.push({ name: nm, isBot: true });
     renderRoom();
-    broadcast({ t: 'room', names: roomPlayers.map(p => p.name + (p.isBot ? ' 🤖' : '')), code: roomCode });
+    broadcastRoom();
   };
 
   $('#btn-start-net').onclick = () => {
     if (roomPlayers.length < 2) return;
-    state = E.createGame(roomPlayers.map(p => ({ name: p.name, isBot: p.isBot })));
+    state = E.createGame(roomPlayers.map(p => ({ name: p.name, isBot: p.isBot, avatar: p.avatar || null })));
     lastLogAbs = 0;
     beginRound(true);
     broadcastState();
@@ -548,7 +681,8 @@
       hostConn.on('open', () => {
         clearTimeout(failT);
         mode = 'guest'; roomCode = code;
-        hostConn.send({ t: 'hello', name: myName });
+        if (window.Profiles) window.Profiles.setRoom(code);
+        hostConn.send({ t: 'hello', name: myName, avatar: myAvatar });
         $('#room-code').textContent = code;
         $('#btn-start-net').style.display = 'none';
         $('#btn-add-bot').style.display = 'none';
@@ -568,7 +702,7 @@
     if (msg.t === 'full') { alert('Комната заполнена или игра уже идёт.'); cleanupNet(); show('menu'); return; }
     if (msg.t === 'emote') { showEmote(msg.seat, msg.e); return; }
     if (msg.t === 'room') {
-      roomPlayers = msg.names.map(n => ({ name: n }));
+      roomPlayers = (msg.players || []).map(p => ({ name: String(p.n || '').slice(0, 14), avatar: safeAvatar(p.a), isBot: !!p.b }));
       renderRoom();
       if (!state) show('room');
       return;
@@ -598,7 +732,7 @@
     roomPlayers.forEach((p, i) => {
       const d = document.createElement('div');
       d.className = 'room-p';
-      d.innerHTML = '<span class="a">' + AVAS[i % AVAS.length] + '</span><span>' + esc(p.name) + (p.isBot ? ' 🤖' : '') + '</span>' +
+      d.innerHTML = '<span class="a pc-ava">' + avaHTML(p.avatar, AVAS[i % AVAS.length]) + '</span><span>' + esc(p.name) + (p.isBot ? ' 🤖' : '') + '</span>' +
         (i === 0 ? '<span class="host-tag">ХОСТ</span>' : '');
       list.appendChild(d);
     });
@@ -653,7 +787,7 @@
       }
       fan += '</div>';
       d.innerHTML = fan +
-        '<div class="ava">' + AVAS[i % AVAS.length] + '</div>' +
+        '<div class="ava">' + avaHTML(p.avatar, AVAS[i % AVAS.length]) + '</div>' +
         '<div class="cnt">' + p.hand.length + '</div>' +
         '<div class="sc">' + p.score + '</div>' +
         '<div class="nm">' + esc(p.name) + '</div>';
@@ -696,7 +830,7 @@
     /* я */
     $('#pi-name').textContent = me.name;
     $('#pi-score').textContent = me.score;
-    $('#pi-ava').textContent = AVAS[mySeat % AVAS.length];
+    $('#pi-ava').innerHTML = avaHTML(me.avatar, AVAS[mySeat % AVAS.length]);
     $('#player-info').classList.toggle('active', (state.turn === mySeat && (state.phase === 'playing' || state.phase === 'chooseSuit')));
 
     /* рука */
@@ -932,7 +1066,7 @@
     $('#m-game').classList.remove('visible');
     // записи игроков с привязкой к соединениям и к себе
     const entries = state.players.map((p, i) => ({
-      name: p.name, isBot: p.isBot,
+      name: p.name, isBot: p.isBot, avatar: p.avatar || null,
       conn: mode === 'host' ? conns.find(c => c.seat === i) : null,
       wasMe: i === mySeat,
     }));
@@ -946,7 +1080,7 @@
       if (e.conn) e.conn.seat = i;   // гости пересаживаются
       if (e.wasMe) mySeat = i;       // и я тоже
     });
-    state = E.createGame(entries.map(e => ({ name: e.name, isBot: e.isBot })));
+    state = E.createGame(entries.map(e => ({ name: e.name, isBot: e.isBot, avatar: e.avatar })));
     lastLogAbs = 0;
     if (shuffled) toast('Игроков перемешали!');
     beginRound(true);

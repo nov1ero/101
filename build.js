@@ -38,12 +38,17 @@ async function buildStickers() {
 (async () => {
   const engine = fs.readFileSync('engine.js', 'utf8');
   const peerjs = fs.readFileSync('node_modules/peerjs/dist/peerjs.min.js', 'utf8');
+  const profiles = fs.readFileSync('profiles.js', 'utf8');
+  // бандл Firebase SDK: пересобирается командой `node build-fb.js`, лежит в репозитории
+  const firebase = fs.existsSync('fb.min.js') ? fs.readFileSync('fb.min.js', 'utf8') : '';
   const tpl = fs.readFileSync('ui.template.html', 'utf8');
   const stickers = await buildStickers();
   const stickersJs = 'const BUILTIN_STICKERS = ' + JSON.stringify(stickers) + ';';
   fs.writeFileSync('index.html', tpl
+    .replace('//__FIREBASE__//', () => firebase)
+    .replace('//__PROFILES__//', () => profiles)
     .replace('//__PEERJS__//', () => peerjs)
     .replace('//__ENGINE__//', () => engine)
     .replace('//__STICKERS__//', () => stickersJs));
-  console.log('index.html собран,', fs.statSync('index.html').size, 'байт, стикеров:', stickers.length);
+  console.log('index.html собран,', fs.statSync('index.html').size, 'байт, стикеров:', stickers.length, firebase ? '(с Firebase)' : '(без Firebase!)');
 })();

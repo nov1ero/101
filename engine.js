@@ -56,6 +56,7 @@
       seed: (seed === undefined ? Math.floor(Math.random() * 2 ** 31) : seed),
       players: players.map((p, i) => ({
         idx: i, name: p.name, isBot: !!p.isBot,
+        avatar: p.avatar || null,
         hand: [], score: 0, eliminated: false,
         roundPoints: 0, // очки, набранные в последнем раунде (для таблицы)
       })),

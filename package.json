@@ -1,5 +1,7 @@
 {
   "dependencies": {
+    "esbuild": "^0.28.1",
+    "firebase": "^12.16.0",
     "jimp": "^0.22.12",
     "peerjs": "^1.5.4",
     "playwright": "^1.62.0"
