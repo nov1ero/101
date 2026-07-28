@@ -374,11 +374,13 @@ function deckTop(s, spec) {
   assert(acts.some(a => a.type === 'draw'), 'но взять карту всё равно можно');
   E.applyAction(s, { type: 'draw' });
   assert(s.players[0].hand.length === 3, 'карта взята');
-  if (s.turn === 0) {
-    const acts2 = E.getLegalActions(s);
-    assert(acts2.some(a => a.type === 'pass'), 'после взятия можно спасовать');
-    assert(!acts2.some(a => a.type === 'draw'), 'вторую взять нельзя');
-  } // если взятая не подошла — ход уже перешёл, это тоже верно
+  assert(s.turn === 0, 'в руке есть подходящая (К♠) — ход не уходит');
+  const acts2 = E.getLegalActions(s);
+  assert(acts2.some(a => a.type === 'play'), 'после взятия можно кинуть любую подходящую карту');
+  assert(acts2.some(a => a.type === 'pass'), 'или спасовать');
+  assert(!acts2.some(a => a.type === 'draw'), 'вторую взять нельзя');
+  E.applyAction(s, acts2.find(a => a.type === 'play'));
+  assert(s.turn === 1, 'сыграл после взятия — ход перешёл');
 }
 
 /* ---------- 14. Туз при двух игроках — дополнительный ход ---------- */
@@ -411,6 +413,55 @@ function deckTop(s, spec) {
   const before = s.players[0].hand.length;
   E.applyAction(s, { type: 'draw' });
   assert(s.players[0].hand.length === before + 1, 'взял ровно одну');
+}
+
+/* ---------- 14б. Последний туз при 2 игроках закрывается как шестёрка ---------- */
+{
+  // взятая карта не закрыла — ход переходит, победы нет
+  const s = E.createGame([{ name: 'A' }, { name: 'B' }], 25);
+  E.startRound(s);
+  rig(s, {
+    hand0: [['Т', '♠']],
+    hand1: [['К', '♥'], ['В', '♦']],
+    top: ['10', '♠'], turn: 0,
+  });
+  E.applyAction(s, { type: 'play', cardIndex: 0 }); // последний туз
+  assert(s.phase === 'playing', 'раунд НЕ закончился — туз надо закрыть');
+  assert(s.turn === 0 && s.mustCover && s.coverMode === 'once', 'закрывает сам, как шестёрку');
+  deckTop(s, ['В', '♥']); // не закрывает Т♠
+  E.applyAction(s, { type: 'draw' });
+  assert(s.phase === 'playing' && s.turn === 1, 'не закрыл — ход перешёл, игрок остался с картой');
+  assert(s.players[0].hand.length === 1, 'взятая карта в руке');
+}
+{
+  // взятая карта закрыла — победа
+  const s = E.createGame([{ name: 'A' }, { name: 'B' }], 26);
+  E.startRound(s);
+  rig(s, {
+    hand0: [['Т', '♠']],
+    hand1: [['К', '♥'], ['В', '♦']],
+    top: ['10', '♠'], turn: 0,
+  });
+  E.applyAction(s, { type: 'play', cardIndex: 0 });
+  deckTop(s, ['К', '♠']); // закрывает
+  E.applyAction(s, { type: 'draw' });
+  const acts = E.getLegalActions(s);
+  assert(acts.some(a => a.type === 'play'), 'можно закрыть взятой');
+  E.applyAction(s, acts.find(a => a.type === 'play'));
+  assert(s.phase === 'roundEnd' && s.roundWinner === 0, 'закрыл туза — победа');
+}
+{
+  // при 3+ игроках последний туз по-прежнему завершает раунд сразу
+  const s = E.createGame([{ name: 'A' }, { name: 'B' }, { name: 'C' }], 27);
+  E.startRound(s);
+  rig(s, {
+    hand0: [['Т', '♠']],
+    hand1: [['К', '♥'], ['В', '♦']],
+    hand2: [['К', '♦'], ['В', '♣'], ['10', '♥'], ['9', '♣'], ['8', '♥']],
+    top: ['10', '♠'], turn: 0,
+  });
+  E.applyAction(s, { type: 'play', cardIndex: 0 });
+  assert(s.phase === 'roundEnd' && s.roundWinner === 0, 'при 3 игроках туз завершает раунд');
 }
 
 /* ---------- 15. Раунд закрыт дамой — всем проигравшим +40 ---------- */

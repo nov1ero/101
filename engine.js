@@ -326,13 +326,19 @@
           return state; // ждём выбора масти тем же игроком
 
         case 'Т':
-          if (player.hand.length === 0) return endRound(state, player.idx);
           if (alivePlayers(state).length === 2) {
+            if (player.hand.length === 0) {
+              // последний туз при игре 1 на 1 — его нужно закрыть, как шестёрку
+              state.mustCover = true;
+              state.coverMode = 'once';
+              return state;
+            }
             // при двух игроках туз — дополнительный ход того же игрока
             state.drawnThisTurn = false;
             emit(state, { type: 'extraTurn', player: player.idx });
             return state; // ход остаётся у игрока (обычный ход: нечем — берёт 1 карту)
           }
+          if (player.hand.length === 0) return endRound(state, player.idx);
           // шаг назад: ход переходит игроку ПЕРЕД текущим, дальше — по часовой
           advanceTurn(state, -1);
           return state;
@@ -384,11 +390,11 @@
       if (state.drawnThisTurn) throw new Error('Карта уже взята в этот ход');
       const c = drawOne(state, player.idx);
       state.drawnThisTurn = true;
-      if (!c || !canPlayCard(state, c)) {
-        // взятая карта не подошла — ход переходит
+      if (!c || playableIndexes(state, player).length === 0) {
+        // сыграть совсем нечем — ход переходит
         advanceTurn(state);
       }
-      // если подошла — игрок может сыграть её (или спасовать)
+      // иначе игрок может кинуть ЛЮБУЮ подходящую карту из руки (или спасовать)
       return state;
     }
 
