@@ -51,7 +51,7 @@
    * players: [{name, isBot}]
    */
   function createGame(players, seed) {
-    if (players.length < 2 || players.length > 5) throw new Error('Игроков должно быть от 2 до 5');
+    if (players.length < 2 || players.length > 6) throw new Error('Игроков должно быть от 2 до 6');
     const state = {
       seed: (seed === undefined ? Math.floor(Math.random() * 2 ** 31) : seed),
       players: players.map((p, i) => ({

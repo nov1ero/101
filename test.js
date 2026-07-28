@@ -602,7 +602,7 @@ function deckTop(s, spec) {
 {
   let ok = 0;
   for (let seed = 100; seed < 400; seed++) {
-    const n = 2 + (seed % 4); // 2..5 игроков
+    const n = 2 + (seed % 5); // 2..6 игроков
     const s = E.createGame(Array.from({ length: n }, (_, i) => ({ name: 'B' + i, isBot: true })), seed);
     let guard = 200000;
     try {

@@ -68,7 +68,8 @@
   #game { padding: env(safe-area-inset-top) 0 0 0; }
 
   #opponents { display: flex; justify-content: space-evenly; padding: 18px 6px 0; min-height: 126px; }
-  .opp { display: flex; flex-direction: column; align-items: center; gap: 2px; position: relative; width: 96px; }
+  .opp { display: flex; flex-direction: column; align-items: center; gap: 2px; position: relative;
+    flex: 1 1 0; max-width: 96px; min-width: 58px; }
   .opp .fan { position: relative; height: 44px; width: 90px; margin-bottom: -30px; }
   .opp .fan .back { position: absolute; width: 30px; height: 42px; border-radius: 4px;
     background: repeating-linear-gradient(45deg, #cfe8cf 0 4px, #fff 4px 8px), #fff;
@@ -440,8 +441,8 @@ window.CLOUDINARY_CONFIG = {
   const E = window.Engine101;
   const $ = sel => document.querySelector(sel);
   const RED = { '♥': 1, '♦': 1 };
-  const BOT_NAMES = ['Тома', 'Галина', 'Борис', 'Марат'];
-  const AVAS = ['👤', '🌸', '💐', '🎩', '🦊'];
+  const BOT_NAMES = ['Тома', 'Галина', 'Борис', 'Марат', 'Зина'];
+  const AVAS = ['👤', '🌸', '💐', '🎩', '🦊', '🐱'];
   const BOT_DELAY = 750;
   const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   const PEER_PREFIX = 'durak101-room-';
@@ -636,7 +637,7 @@ window.CLOUDINARY_CONFIG = {
 
   /* ================= ЛОББИ С БОТАМИ ================= */
   const countRow = $('#count-row');
-  [2, 3, 4, 5].forEach(n => {
+  [2, 3, 4, 5, 6].forEach(n => {
     const b = document.createElement('button');
     b.className = 'count-btn' + (n === playerCount ? ' sel' : '');
     b.textContent = n;
@@ -717,7 +718,7 @@ window.CLOUDINARY_CONFIG = {
   function onGuestConnect(conn) {
     conn.on('data', msg => {
       if (msg && msg.t === 'hello') {
-        if (state || roomPlayers.length >= 5) { conn.send({ t: 'full' }); setTimeout(() => conn.close(), 500); return; }
+        if (state || roomPlayers.length >= 6) { conn.send({ t: 'full' }); setTimeout(() => conn.close(), 500); return; }
         const name = String(msg.name || 'Гость').slice(0, 12);
         const avatar = safeAvatar(msg.avatar);
         const seat = roomPlayers.length;
@@ -768,7 +769,7 @@ window.CLOUDINARY_CONFIG = {
   }
 
   $('#btn-add-bot').onclick = () => {
-    if (roomPlayers.length >= 5) return;
+    if (roomPlayers.length >= 6) return;
     const used = roomPlayers.map(p => p.name);
     const nm = BOT_NAMES.find(n => !used.includes(n)) || 'Бот';
     roomPlayers.push({ name: nm, isBot: true });
